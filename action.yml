@@ -1,0 +1,29 @@
+name: actions-harden
+description: Scan GitHub Actions workflows for unpinned actions, broad permissions, pull_request_target risks and script injection.
+author: kobima6813
+branding:
+  icon: shield
+  color: blue
+inputs:
+  path:
+    description: Repo root, workflows directory, or a single workflow file
+    default: "."
+  fail-on:
+    description: "Fail the step at or above this severity: none | low | medium | high"
+    default: high
+  json:
+    description: Emit JSON instead of text
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        AH_PATH: ${{ inputs.path }}
+        AH_FAIL_ON: ${{ inputs.fail-on }}
+        AH_JSON: ${{ inputs.json }}
+        PYTHONPATH: ${{ github.action_path }}
+      run: |
+        args=("$AH_PATH" --fail-on "$AH_FAIL_ON")
+        if [ "$AH_JSON" = "true" ]; then args+=(--json); fi
+        python3 -m actions_harden "${args[@]}"
