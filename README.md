@@ -3,7 +3,7 @@
 [![ci](https://github.com/kobima6813/actions-harden/actions/workflows/ci.yml/badge.svg)](https://github.com/kobima6813/actions-harden/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Find the four most common GitHub Actions security mistakes in seconds — and pin your actions to commit SHAs with one flag.**
+**Find the most common GitHub Actions security mistakes in seconds — and pin your actions to commit SHAs with one flag.**
 
 Zero dependencies (Python 3.9+ standard library only). Runs as a CLI or as a composite GitHub Action.
 
@@ -19,6 +19,11 @@ Zero dependencies (Python 3.9+ standard library only). Runs as a CLI or as a com
 | `pull-request-target` | medium | Runs with secrets on PRs from forks. |
 | `pull-request-target-checkout` | high | ...and checks out the untrusted PR code — the classic "pwn request". |
 | `script-injection` | high | `${{ github.event.issue.title }}` (and friends) expanded inside `run:` lets anyone who can open an issue/PR run shell commands. |
+| `secret-in-log` | high | `echo ${{ secrets.X }}` (or `printf`, `print`, `Write-Host`…) puts the secret in the job log. Masking is best-effort: base64/split/transformed values are not masked. Writing to a file or `$GITHUB_ENV` is not flagged. |
+| `long-lived-cloud-key` | medium | Static AWS access keys (`aws-access-key-id`, `AWS_ACCESS_KEY_ID`), GCP service-account JSON (`credentials_json`) or Azure `creds` stored as secrets. Use OIDC (`role-to-assume`, `workload_identity_provider`, federated `client-id`) so there is no long-lived key to leak or rotate. |
+| `workflow-env-secret` | medium (low for `GITHUB_TOKEN`) | A secret in top-level `env:` is visible to every step of every job, including third-party actions. Scope it to the one step that needs it. |
+
+> **After a hosting/secret-store breach:** rotating keys is step one; the secret rules above help make sure the new keys don't leak again from CI.
 
 ## Use as a GitHub Action
 

@@ -121,6 +121,71 @@ def scan_text(text, path="<workflow>"):
         else:
             out.append(finding(path, 1, "pull-request-target", "medium",
                                "pull_request_target runs with secrets on fork PRs; make sure no PR code is executed."))
+    out += scan_secrets(text, path)
+    return out
+
+
+SECRET_EXPR = re.compile(r"\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}")
+LOG_CMD = re.compile(r"(?:^|[;&|(\s])(?:echo|printf|print|puts|console\.log|Write-Host|Write-Output)\b")
+REDIRECT = re.compile(r">>?\s*(?:\"?\$\{?GITHUB_\w+|[^\s&|]+)")
+CLOUD_KEY = [
+    (re.compile(r"^\s*-?\s*aws-(?:access-key-id|secret-access-key):\s*\$\{\{\s*secrets\."), "AWS",
+     "aws-actions/configure-aws-credentials with 'role-to-assume' + 'permissions: id-token: write'"),
+    (re.compile(r"^\s*-?\s*(?:AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY):\s*\$\{\{\s*secrets\."), "AWS",
+     "aws-actions/configure-aws-credentials with 'role-to-assume' (OIDC)"),
+    (re.compile(r"^\s*-?\s*credentials_json:\s*\$\{\{\s*secrets\."), "GCP",
+     "google-github-actions/auth with 'workload_identity_provider' (Workload Identity Federation)"),
+    (re.compile(r"^\s*-?\s*(?:GOOGLE_CREDENTIALS|GOOGLE_APPLICATION_CREDENTIALS_JSON|GCP_SA_KEY):\s*\$\{\{\s*secrets\."), "GCP",
+     "google-github-actions/auth with 'workload_identity_provider'"),
+    (re.compile(r"^\s*-?\s*creds:\s*\$\{\{\s*secrets\."), "Azure",
+     "azure/login with 'client-id', 'tenant-id', 'subscription-id' (federated credentials)"),
+]
+
+
+def scan_secrets(text, path="<workflow>"):
+    """Secret-handling checks: secrets echoed to logs, long-lived cloud keys, workflow-wide secret env."""
+    out = []
+    in_run = False
+    run_indent = 0
+    in_top_env = False
+    for i, raw in enumerate(text.splitlines(), 1):
+        s = raw.rstrip()
+        stripped = s.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        ind = _indent(s)
+        if in_run and ind <= run_indent:
+            in_run = False
+        if ind == 0:
+            in_top_env = stripped.startswith("env:")
+            continue
+        if in_top_env:
+            m = SECRET_EXPR.search(stripped)
+            if m:
+                sev = "low" if m.group(1) == "GITHUB_TOKEN" else "medium"
+                out.append(finding(path, i, "workflow-env-secret", sev,
+                                   f"secrets.{m.group(1)} is set in workflow-level env:, exposing it to every step of every job "
+                                   "(including third-party actions). Scope it to the step that needs it."))
+        for rx, cloud, alt in CLOUD_KEY:
+            if rx.search(s):
+                out.append(finding(path, i, "long-lived-cloud-key", "medium",
+                                   f"Long-lived {cloud} key from secrets. Prefer short-lived OIDC credentials: {alt}."))
+                break
+        body = None
+        rm = re.match(r"^\s*-?\s*run:\s*(.*)$", s)
+        if rm:
+            if rm.group(1).startswith(("|", ">")):
+                in_run, run_indent = True, ind
+                continue
+            body = rm.group(1)
+        elif in_run:
+            body = stripped
+        if body and LOG_CMD.search(body):
+            m = SECRET_EXPR.search(body)
+            if m and not REDIRECT.search(body[m.end():]):
+                out.append(finding(path, i, "secret-in-log", "high",
+                                   f"secrets.{m.group(1)} is printed in a run: step. Masking is best-effort (encoded/split "
+                                   "values leak); never echo secrets."))
     return out
 
 

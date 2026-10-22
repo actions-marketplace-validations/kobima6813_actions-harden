@@ -20,6 +20,26 @@ class T(unittest.TestCase):
         self.assertEqual({x["severity"] for x in un}, {"low", "medium"})
         self.assertIn("build", [x for x in f if x["rule"] == "missing-permissions"][0]["message"])
 
+    def test_secrets_bad(self):
+        f = scan_text((FIX / "secrets_bad.yml").read_text())
+        got = [(x["rule"], x["severity"], x["line"]) for x in f]
+        self.assertEqual(sorted(got), sorted([
+            ("workflow-env-secret", "medium", 7), ("workflow-env-secret", "low", 8),
+            ("long-lived-cloud-key", "medium", 15), ("long-lived-cloud-key", "medium", 16),
+            ("long-lived-cloud-key", "medium", 20),
+            ("secret-in-log", "high", 21), ("secret-in-log", "high", 24)]))
+
+    def test_secret_scoped_to_step_ok(self):
+        src = ("on: push\npermissions: {}\njobs:\n  a:\n    runs-on: x\n    steps:\n"
+               "      - run: ./deploy.sh\n        env:\n          KEY: ${{ secrets.KEY }}\n"
+               "      - uses: aws-actions/configure-aws-credentials@" + "a" * 40 + "\n"
+               "        with:\n          role-to-assume: arn:aws:iam::1:role/x\n")
+        self.assertEqual(scan_text(src), [])
+
+    def test_secret_in_log_env_var_ok(self):
+        src = "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: echo \"$HOME\"\n"
+        self.assertEqual(scan_text(src), [])
+
     def test_good(self):
         self.assertEqual(scan_text((FIX / "good.yml").read_text()), [])
 
