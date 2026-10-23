@@ -9,6 +9,29 @@ Zero dependencies (Python 3.9+ standard library only). Runs as a CLI or as a com
 
 > If this saves you a review cycle, please ⭐ **star the repo** — it helps other teams find it.
 
+## Quickstart (30 seconds)
+
+```bash
+git clone https://github.com/kobima6813/actions-harden && cd actions-harden
+python3 -m actions_harden /path/to/your/repo --fail-on none   # report only
+python3 -m actions_harden /path/to/your/repo --fix            # pin actions to commit SHAs
+```
+
+Sample output (real run on [`tests/fixtures/secrets_bad.yml`](tests/fixtures/secrets_bad.yml)):
+
+```text
+$ python3 -m actions_harden tests/fixtures/secrets_bad.yml --fail-on none
+tests/fixtures/secrets_bad.yml:7: [MEDIUM] workflow-env-secret: secrets.OPENAI_API_KEY is set in workflow-level env:, exposing it to every step of every job (including third-party actions). Scope it to the step that needs it.
+tests/fixtures/secrets_bad.yml:8: [LOW] workflow-env-secret: secrets.GITHUB_TOKEN is set in workflow-level env:, exposing it to every step of every job (including third-party actions). Scope it to the step that needs it.
+tests/fixtures/secrets_bad.yml:15: [MEDIUM] long-lived-cloud-key: Long-lived AWS key from secrets. Prefer short-lived OIDC credentials: aws-actions/configure-aws-credentials with 'role-to-assume' + 'permissions: id-token: write'.
+tests/fixtures/secrets_bad.yml:16: [MEDIUM] long-lived-cloud-key: Long-lived AWS key from secrets. Prefer short-lived OIDC credentials: aws-actions/configure-aws-credentials with 'role-to-assume' + 'permissions: id-token: write'.
+tests/fixtures/secrets_bad.yml:20: [MEDIUM] long-lived-cloud-key: Long-lived GCP key from secrets. Prefer short-lived OIDC credentials: google-github-actions/auth with 'workload_identity_provider' (Workload Identity Federation).
+tests/fixtures/secrets_bad.yml:21: [HIGH] secret-in-log: secrets.DEPLOY_KEY is printed in a run: step. Masking is best-effort (encoded/split values leak); never echo secrets.
+tests/fixtures/secrets_bad.yml:24: [HIGH] secret-in-log: secrets.DB_PASSWORD is printed in a run: step. Masking is best-effort (encoded/split values leak); never echo secrets.
+
+Scanned 1 workflow file(s): 2 high, 4 medium, 1 low.
+```
+
 ## What it checks
 
 | Rule | Severity | Why it matters |
