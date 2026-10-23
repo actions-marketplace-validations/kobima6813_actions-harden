@@ -127,6 +127,7 @@ def scan_text(text, path="<workflow>"):
 
 SECRET_EXPR = re.compile(r"\$\{\{\s*secrets\.([A-Za-z0-9_]+)\s*\}\}")
 LOG_CMD = re.compile(r"(?:^|[;&|(\s])(?:echo|printf|print|puts|console\.log|Write-Host|Write-Output)\b")
+PIPED = re.compile(r"^[^;&|]*\|(?!\|)")
 REDIRECT = re.compile(r">>?\s*(?:\"?\$\{?GITHUB_\w+|[^\s&|]+)")
 CLOUD_KEY = [
     (re.compile(r"^\s*-?\s*aws-(?:access-key-id|secret-access-key):\s*\$\{\{\s*secrets\."), "AWS",
@@ -182,7 +183,7 @@ def scan_secrets(text, path="<workflow>"):
             body = stripped
         if body and LOG_CMD.search(body):
             m = SECRET_EXPR.search(body)
-            if m and not REDIRECT.search(body[m.end():]):
+            if m and not REDIRECT.search(body[m.end():]) and not PIPED.search(body[m.end():]):
                 out.append(finding(path, i, "secret-in-log", "high",
                                    f"secrets.{m.group(1)} is printed in a run: step. Masking is best-effort (encoded/split "
                                    "values leak); never echo secrets."))

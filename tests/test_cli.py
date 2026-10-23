@@ -40,6 +40,17 @@ class T(unittest.TestCase):
         src = "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: echo \"$HOME\"\n"
         self.assertEqual(scan_text(src), [])
 
+    def test_secret_piped_to_stdin_ok(self):
+        head = "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: x\n    steps:\n"
+        for run in ['echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u x --password-stdin',
+                    "printf '%s' ${{ secrets.DOCKER_PW }} | docker login -u x --password-stdin",
+                    "echo ${{ secrets.X }} | base64 -d > key.pem"]:
+            self.assertEqual(scan_text(head + "      - run: " + run + "\n"), [], run)
+
+    def test_secret_echo_then_pipe_or_still_flagged(self):
+        src = "on: push\npermissions: {}\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: echo ${{ secrets.X }} || true\n"
+        self.assertEqual([f["rule"] for f in scan_text(src)], ["secret-in-log"])
+
     def test_good(self):
         self.assertEqual(scan_text((FIX / "good.yml").read_text()), [])
 
